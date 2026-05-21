@@ -3,6 +3,8 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <pwd.h>
+#include <limits.h>
 #include "include/builtins.h"
 
 #define LINE_BUFSIZE 1024
@@ -14,7 +16,7 @@ char*   read_line();
 char**  parse_line(char*);
 int     launch_bin(char**);
 int     exec(char**);
-
+char*   shorten_path(const char*);
 
 int main(){
 
@@ -27,9 +29,24 @@ void shell_loop(){
     char*   line;
     char**  args;
     int     status;
+    char    cwd[PATH_MAX];
+    char*   display_cwd;
+    const char* username = getenv("USER");
+
+    if (username == NULL){
+        fprintf(stderr, "Username not found... Defaulting to user.\n");
+        username = "user"; 
+    }
 
     do{
-        printf("> ");
+        if (getcwd(cwd, sizeof(cwd)) != NULL){
+            display_cwd = shorten_path(cwd);
+            printf("%s | %s\n[]---> ", username, display_cwd);
+            
+            free(display_cwd);
+        } else {
+            printf("%s []---> ", username);
+        }
         line   = read_line();
         args   = parse_line(line);
         status = exec(args);
@@ -168,4 +185,33 @@ int exec(char** args){
     }
 
     return launch_bin(args); 
+}
+
+char* shorten_path(const char* full_path){
+    char* home = getenv("HOME");
+
+    if (!home){
+        return strdup(full_path);
+    }
+
+    size_t home_len = strlen(home);
+    size_t path_len = strlen(full_path);
+
+    if (path_len >= home_len && strncmp(full_path, home, home_len) == 0){
+        if (path_len == home_len){
+            return strdup("~");
+        }
+
+        if (full_path[home_len] == '/'){
+            size_t remaining_len = path_len - home_len;
+            char* short_path = malloc(remaining_len + 2);
+
+            if (!short_path) return strdup(full_path);
+
+            sprintf(short_path, "~%s", full_path + home_len); 
+            return short_path; 
+        }
+    }
+
+    return strdup(full_path); 
 }

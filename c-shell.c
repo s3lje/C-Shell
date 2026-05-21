@@ -16,7 +16,7 @@ int     launch_bin(char**);
 int     exec(char**);
 
 
-int main(int argc, char** argv){
+int main(){
 
     shell_loop();
 
@@ -47,7 +47,7 @@ char* read_line(){
 
     if (!buffer){
         fprintf(stderr, "read_line: allocation error...\n");
-        return EXIT_FAILURE;
+        exit(EXIT_FAILURE);
     }
 
     while (1){
@@ -65,7 +65,7 @@ char* read_line(){
             buffer = realloc(buffer, bufferSize);
             if (!buffer) {
                 fprintf(stderr, "read_line: re-allocation error...\n"); 
-                return EXIT_FAILURE;
+                exit(EXIT_FAILURE);
             }
         }
     }
@@ -79,7 +79,7 @@ char** parse_line(char* line){
 
     if (!tokens){
         fprintf(stderr, "parse_line: allocation error...\n");
-        return EXIT_FAILURE;
+        exit(EXIT_FAILURE);
     }
     
     char* start = line;
@@ -92,7 +92,7 @@ char** parse_line(char* line){
                 tokens[pos] = malloc(len+1);
                 if (!tokens){
                     fprintf(stderr, "parse_line: allocation error...\n");
-                    return EXIT_FAILURE;
+                    exit(EXIT_FAILURE);
                 }
 
                 strncpy(tokens[pos], start, len);
@@ -103,7 +103,7 @@ char** parse_line(char* line){
                     tokens = realloc(tokens, bufferSize * sizeof(char*));
                     if (!tokens){
                         fprintf(stderr, "parse_line: allocation error...\n");
-                        return EXIT_FAILURE;
+                        exit(EXIT_FAILURE);
                     }
                 }
             }
@@ -119,7 +119,7 @@ char** parse_line(char* line){
 
         if (!tokens[pos]){
             fprintf(stderr, "parse_line: allocation error...\n");
-            return EXIT_FAILURE; 
+            exit(EXIT_FAILURE); 
         }
 
         strncpy(tokens[pos], start, len);
@@ -141,7 +141,7 @@ int launch_bin(char** args){
         if (execvp(args[0], args) == -1){
             perror("launch_bin");
         }
-        return EXIT_FAILURE;
+        exit(EXIT_FAILURE);
     } else if (pid < 0){
         // Error forking
         perror("launch_bin");

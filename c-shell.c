@@ -12,9 +12,8 @@
 void    shell_loop();
 char*   read_line();
 char**  parse_line(char*);
-int     exec();
 int     launch_bin(char**);
-
+int     exec(char**);
 
 //// Built-ins ////////////////////////////////////////////
 int chd(char** args);
@@ -54,7 +53,6 @@ int chd(char** args){
  * Prints a help menu to the user.
  */
 int help(char** args){
-    int i;
     printf("C-SHELL\n");
     printf("Type a program name followed by its arguments, and hit enter.\n");
     printf("The following are built in:\n");
@@ -75,6 +73,9 @@ int quit(char** args){
 }
 
 //////////////////////////////////////////////////////////////
+
+
+
 
 int main(int argc, char** argv){
 
@@ -213,4 +214,19 @@ int launch_bin(char** args){
     }
 
     return 1;
+}
+
+int exec(char** args){
+    if (args[0] == NULL){
+        // Empty command entered
+        return 1;
+    }
+
+    for (int i = 0; i < num_builtins(); i++){
+        if (strcmp(args[0], builtin_str[i]) == 0){
+            return (*builtin_func[i])(args);
+        }
+    }
+
+    return launch_bin(args); 
 }

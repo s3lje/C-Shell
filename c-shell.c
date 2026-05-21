@@ -72,31 +72,58 @@ char* read_line(){
 char** parse_line(char* line){
     int bufferSize  = TOK_BUFSIZE;
     int pos         = 0;
+    int len         = 0;
     char** tokens   = malloc(bufferSize * sizeof(char*));
-    char*  token;
 
     if (!tokens){
         fprintf(stderr, "parse_line: allocation error...\n");
         return EXIT_FAILURE;
     }
+    
+    char* start = line;
+    char* p     = line;
 
-    token = strtok(line, TOK_DELIM);
-    while (token != NULL){
-        tokens[pos] = token;
-        pos++;
+    while (*p){
+        if (strchr(TOK_DELIM, *p)){
+            if (p > start){ // found token
+                len = p - start;
+                tokens[pos] = malloc(len+1);
+                if (!tokens){
+                    fprintf(stderr, "parse_line: allocation error...\n");
+                    return EXIT_FAILURE;
+                }
 
-        if (pos >= bufferSize){
-            bufferSize += TOK_BUFSIZE;
-            tokens = realloc(tokens, bufferSize * sizeof(char*));
-            if (!tokens){
-                fprintf(stderr, "parse_line: allocation error...\n");
-                return EXIT_FAILURE;
+                strncpy(tokens[pos], start, len);
+                tokens[pos++][len] = '\0';
+
+                if (pos >= bufferSize){
+                    bufferSize += TOK_BUFSIZE;
+                    tokens = realloc(tokens, bufferSize * sizeof(char*));
+                    if (!tokens){
+                        fprintf(stderr, "parse_line: allocation error...\n");
+                        return EXIT_FAILURE;
+                    }
+                }
             }
+            start = p + 1;
+        }
+        p++;
+    }
+    
+    // Handle last token 
+    if (p > start) {
+        len = p - start;
+        tokens[pos] = malloc(len+1);
+
+        if (!tokens[pos]){
+            fprintf(stderr, "parse_line: allocation error...\n");
+            return EXIT_FAILURE; 
         }
 
-        token = strtok(NULL, TOK_DELIM);
+        strncpy(tokens[pos], start, len);
+        tokens[pos++][len] = '\0';
     }
 
     tokens[pos] = NULL;
-    return tokens; 
+    return tokens;
 }

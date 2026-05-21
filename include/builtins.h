@@ -10,7 +10,7 @@ int num_builtins();
 static char* builtin_str[] = {
     "cd",
     "help",
-    "quit"
+    "exit"
 };
 
 static int (*builtin_func[])(char**) = {

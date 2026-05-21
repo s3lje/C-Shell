@@ -156,7 +156,9 @@ int launch_bin(char** args){
     if (pid == 0){
         // Child process
         if (execvp(args[0], args) == -1){
-            perror("launch_bin");
+            fprintf(stderr, "----------------------------------------\n");
+            perror("c-shell");
+            fprintf(stderr, "----------------------------------------\n"); 
         }
         exit(EXIT_FAILURE);
     } else if (pid < 0){

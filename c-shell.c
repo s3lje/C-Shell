@@ -2,6 +2,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #define LINE_BUFSIZE 1024
 #define TOK_BUFSIZE  64
@@ -11,10 +13,34 @@ void    shell_loop();
 char*   read_line();
 char**  parse_line(char*);
 int     exec();
+int     launch_bin(char**);
 
-#include <stdlib.h>
+
+//// Built-ins ////////////////////////////////////////////
+int chd(char** args);
+int help(char** args);
+int quit(char** args);
+
+char* builtin_str[] = {
+    "cd",
+    "help",
+    "exit",
+};
+
+int (*builtin_func[]) (char**) = {
+    &chd,
+    &help,
+    &quit
+};
+
+int num_builtins(){
+    return sizeof(builtin_str) / sizeof(char *);
+}
+
+
+//////////////////////////////////////////////////////////////
+
 int main(int argc, char** argv){
-    
 
     shell_loop();
 
@@ -126,4 +152,29 @@ char** parse_line(char* line){
 
     tokens[pos] = NULL;
     return tokens;
+}
+
+int launch_bin(char** args){
+    pid_t pid;
+    pid_t wpid;
+    int status;
+
+    pid = fork();
+    if (pid == 0){
+        // Child process
+        if (execvp(args[0], args) == -1){
+            perror("launch_bin");
+        }
+        return EXIT_FAILURE;
+    } else if (pid < 0){
+        // Error forking
+        perror("launch_bin");
+    } else {
+        // Parent process
+        do {
+            wpid = waitpid(pid, &status, WUNTRACED);
+        } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+    }
+
+    return 1;
 }

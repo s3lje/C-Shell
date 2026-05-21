@@ -1,8 +1,7 @@
 #include <stdio.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #define LINE_BUFSIZE 1024
@@ -93,7 +92,7 @@ void shell_loop(){
         printf("> ");
         line   = read_line();
         args   = parse_line(line);
-        status = exec();
+        status = exec(args);
 
         free(line);
         free(args);

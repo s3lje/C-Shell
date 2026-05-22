@@ -57,7 +57,6 @@ void shell_loop(){
         if (cmd_num == 1){
             args = parse_line(cmds[0]);
             if (!args[0]) { free(args); free(cmds); continue; }
-
             status = exec(args);
         } else if (cmd_num == 2){
             status = 1; 
@@ -103,8 +102,60 @@ void shell_loop(){
             close(fd[0]);
             close(fd[1]);
             waitpid(pid1, NULL, 0);
-            waitpid(pid2, NULL, 0);
- 
+            waitpid(pid2, NULL, 0); 
+        } else { // more than two commands
+            int pipe_num = cmd_num - 1;
+            int pipes[pipe_num][2];
+
+            for (int i = 0; i < pipe_num; i++){
+                if (pipe(pipes[i]) == -1){
+                    perror("pipe");
+                    exit(EXIT_FAILURE);
+                }
+            }
+
+            for (int i = 0; i < cmd_num; i++){
+                pid_t pid = fork();
+                if (pid == -1){
+                    perror("fork");
+                    exit(EXIT_FAILURE);
+                }
+
+                if (pid == 0){
+                    if (i > 0){
+                        dup2(pipes[i-1][0], STDIN_FILENO);
+                        close(pipes[i-1][0]);
+                        close(pipes[i-1][1]);
+                    }
+
+                    if (i < cmd_num - 1){
+                        dup2(pipes[i][1], STDOUT_FILENO);
+                        close(pipes[i][0]);
+                        close(pipes[i][1]);
+                    }
+
+                    for (int j = 0; j < pipe_num; j++){
+                        if ((i == 0 || j != i-1) && (i == cmd_num-1 || j != i)){
+                            close(pipes[j][0]);
+                            close(pipes[j][1]);
+                        }
+                    }
+
+                    args = parse_line(cmds[i]);
+                    execvp(args[0], args);
+                    perror("execvp");
+                    exit(EXIT_FAILURE);
+                }
+            }
+
+            for (int i = 0; i < pipe_num; i++){
+                close(pipes[i][0]);
+                close(pipes[i][1]);
+            }
+            for (int i = 0; i < cmd_num; i++){
+                waitpid(-1, NULL, 0); // wait for any child to finish
+            }
+
         }
 
         free(line);

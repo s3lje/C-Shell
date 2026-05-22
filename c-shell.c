@@ -14,6 +14,7 @@
 void    shell_loop();
 char*   read_line();
 char**  parse_line(char*);
+char**  split_pipes(char*, int*);
 int     launch_bin(char**);
 int     exec(char**);
 char*   shorten_path(const char*);
@@ -28,8 +29,10 @@ int main(){
 void shell_loop(){
     char*   line;
     char**  args;
-    int     status;
+    int     cmd_num; 
+    char**  cmds;
     char    cwd[PATH_MAX];
+    int     status; 
     char*   display_cwd;
     const char* username = getenv("USER");
 
@@ -47,12 +50,66 @@ void shell_loop(){
         } else {
             printf("%s []---> ", username);
         }
+
         line   = read_line();
-        args   = parse_line(line);
-        status = exec(args);
+        cmds   = split_pipes(line, &cmd_num);
+
+        if (cmd_num == 1){
+            args = parse_line(cmds[0]);
+            if (!args[0]) { free(args); free(cmds); continue; }
+
+            status = exec(args);
+        } else if (cmd_num == 2){
+            status = 1; 
+            int fd[2];
+            if (pipe(fd) == -1){
+                perror("pipe");
+                exit(EXIT_FAILURE);
+            }
+            
+            pid_t pid1 = fork();
+            if (pid1 == -1){
+                perror("fork");
+                exit(EXIT_FAILURE); 
+            }
+            if (pid1 == 0){
+                close(fd[0]);
+                dup2(fd[1], STDOUT_FILENO);
+                close(fd[1]);
+
+                args = parse_line(cmds[0]);
+                execvp(args[0], args);
+                perror("execpv (cmd1)");
+                exit(EXIT_FAILURE);
+            }
+
+            pid_t pid2 = fork();
+            if (pid2 == -1){
+                perror("fork");
+                exit(EXIT_FAILURE);
+            }
+
+            if (pid2 == 0){
+                close(fd[1]);
+                dup2(fd[0], STDIN_FILENO);
+                close(fd[0]);
+
+                args = parse_line(cmds[1]);
+                execvp(args[0], args); 
+                perror("execpv (cmd2)");
+                exit(EXIT_FAILURE); 
+            }
+
+            close(fd[0]);
+            close(fd[1]);
+            waitpid(pid1, NULL, 0);
+            waitpid(pid2, NULL, 0);
+ 
+        }
 
         free(line);
         free(args);
+        free(cmds); 
     } while (status);
 }
 
@@ -145,6 +202,34 @@ char** parse_line(char* line){
 
     tokens[pos] = NULL;
     return tokens;
+}
+
+char** split_pipes(char* input, int* cmd_num){
+    char**  cmds;
+    char*   token;
+    int i = 0;
+
+    *cmd_num = 1;
+    for (int i = 0; input[i]; i++){
+        if (input[i] == '|') (*cmd_num)++;
+    }
+
+    cmds = malloc(*cmd_num * sizeof(char*));
+    token = strtok(input, "|"); 
+    
+    while (token != NULL && i < *cmd_num){
+        char* trimmed = token;
+        while (*trimmed == ' ' || *trimmed == '\t')
+            trimmed++;
+        char* end = trimmed + strlen(trimmed) - 1;
+        while (end > trimmed && (*end == ' ' || *end == '\t' || *end == '\n'))
+            end--;
+        *(end + 1) = '\0';
+
+        cmds[i++] = trimmed;
+        token = strtok(NULL, "|");
+    }
+    return cmds; 
 }
 
 int launch_bin(char** args){

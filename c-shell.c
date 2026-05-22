@@ -52,6 +52,7 @@ void shell_loop(){
         }
 
         line   = read_line();
+        args   = NULL; 
         cmds   = split_pipes(line, &cmd_num);
 
         if (cmd_num == 1){
@@ -122,23 +123,14 @@ void shell_loop(){
                 }
 
                 if (pid == 0){
-                    if (i > 0){
+                    if (i > 0)
                         dup2(pipes[i-1][0], STDIN_FILENO);
-                        close(pipes[i-1][0]);
-                        close(pipes[i-1][1]);
-                    }
-
-                    if (i < cmd_num - 1){
+                    if (i < cmd_num - 1)
                         dup2(pipes[i][1], STDOUT_FILENO);
-                        close(pipes[i][0]);
-                        close(pipes[i][1]);
-                    }
 
                     for (int j = 0; j < pipe_num; j++){
-                        if ((i == 0 || j != i-1) && (i == cmd_num-1 || j != i)){
-                            close(pipes[j][0]);
-                            close(pipes[j][1]);
-                        }
+                        close(pipes[j][0]);
+                        close(pipes[j][1]);
                     }
 
                     args = parse_line(cmds[i]);
@@ -159,7 +151,10 @@ void shell_loop(){
         }
 
         free(line);
-        free(args);
+        if (args) {
+            free(args);
+            args = NULL; 
+        }
         free(cmds); 
     } while (status);
 }
@@ -277,7 +272,7 @@ char** split_pipes(char* input, int* cmd_num){
             end--;
         *(end + 1) = '\0';
 
-        cmds[i++] = trimmed;
+        cmds[i++] = strdup(trimmed);
         token = strtok(NULL, "|");
     }
     return cmds; 

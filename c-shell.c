@@ -194,7 +194,6 @@ char* read_line(){
 char** parse_line(char* line){
     int bufferSize  = TOK_BUFSIZE;
     int pos         = 0;
-    int len         = 0;
     char** tokens   = malloc(bufferSize * sizeof(char*));
 
     if (!tokens){
@@ -202,60 +201,55 @@ char** parse_line(char* line){
         exit(EXIT_FAILURE);
     }
     
-    char* start = line;
     char* p     = line;
 
     while (*p){
-        if (strchr(TOK_DELIM, *p)){
-            if (p > start){ // found token
-                len = p - start;
-                tokens[pos] = malloc(len+1);
-                if (!tokens){
-                    fprintf(stderr, "parse_line: allocation error...\n");
-                    exit(EXIT_FAILURE);
-                }
+        while (*p && strchr(TOK_DELIM, *p)) 
+            p++;
+        if (!*p)
+            break;
 
-                // Handle quoted parameters 
-                if ((*start == '"' && *(start + len-1) == '"') || 
-                        (*start == '\'' && *(start + len-1) == '\'')){
-                    strncpy(tokens[pos], start+1, len-2);
-                } else
-                    strncpy(tokens[pos], start, len);
-                tokens[pos++][len] = '\0';
+        char* tokenStart;
+        int   tokenLen;
 
-                if (pos >= bufferSize){
-                    bufferSize += TOK_BUFSIZE;
-                    tokens = realloc(tokens, bufferSize * sizeof(char*));
-                    if (!tokens){
-                        fprintf(stderr, "parse_line: allocation error...\n");
-                        exit(EXIT_FAILURE);
-                    }
-                }
-            }
-            start = p + 1;
+        if (*p == '"' || *p == '\''){
+            char quote = *p;
+            p++;
+            tokenStart = p;
+            while (*p && *p != quote)
+                p++;
+            tokenLen = p - tokenStart;
+            if (*p == quote)
+                p++;
+        } else {
+            tokenStart = p;
+            while(*p && !strchr(TOK_DELIM, *p))
+                p++;
+            tokenLen = p - tokenStart;
         }
-        p++;
-    }
-    
-    // Handle last token 
-    if (p > start) {
-        len = p - start;
-        tokens[pos] = malloc(len+1);
 
+        tokens[pos] = malloc(tokenLen+1);
         if (!tokens[pos]){
             fprintf(stderr, "parse_line: allocation error...\n");
-            exit(EXIT_FAILURE); 
+            exit(EXIT_FAILURE);
         }
-        if ((*start == '"' && *(start + len-1) == '"') || 
-                (*start == '\'' && *(start + len-1) == '\'')){
-            strncpy(tokens[pos], start+1, len-2);
-        } else
-            strncpy(tokens[pos], start, len);
-        tokens[pos++][len] = '\0';
+
+        strncpy(tokens[pos], tokenStart, tokenLen);
+        tokens[pos++][tokenLen] = '\0';
+
+        if (pos >= bufferSize){
+            bufferSize += TOK_BUFSIZE;
+            tokens = realloc(tokens, bufferSize * sizeof(char*));
+            if (!tokens){
+                fprintf(stderr, "parse_line: allocation error"); 
+                exit(EXIT_FAILURE); 
+            }
+        }
     }
 
     tokens[pos] = NULL;
-    return tokens;
+    
+    return tokens;    
 }
 
 char** split_pipes(char* input, int* cmd_num){

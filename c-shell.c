@@ -215,7 +215,12 @@ char** parse_line(char* line){
                     exit(EXIT_FAILURE);
                 }
 
-                strncpy(tokens[pos], start, len);
+                // Handle quoted parameters 
+                if ((*start == '"' && *(start + len-1) == '"') || 
+                        (*start == '\'' && *(start + len-1) == '\'')){
+                    strncpy(tokens[pos], start+1, len-2);
+                } else
+                    strncpy(tokens[pos], start, len);
                 tokens[pos++][len] = '\0';
 
                 if (pos >= bufferSize){
@@ -241,8 +246,11 @@ char** parse_line(char* line){
             fprintf(stderr, "parse_line: allocation error...\n");
             exit(EXIT_FAILURE); 
         }
-
-        strncpy(tokens[pos], start, len);
+        if ((*start == '"' && *(start + len-1) == '"') || 
+                (*start == '\'' && *(start + len-1) == '\'')){
+            strncpy(tokens[pos], start+1, len-2);
+        } else
+            strncpy(tokens[pos], start, len);
         tokens[pos++][len] = '\0';
     }
 

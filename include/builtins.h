@@ -4,19 +4,9 @@
 int chd(char** args);
 int help(char** args);
 int quit(char** args);
-
 int num_builtins();
 
-static char* builtin_str[] = {
-    "cd",
-    "help",
-    "exit"
-};
-
-static int (*builtin_func[])(char**) = {
-    &chd,
-    &help,
-    &quit
-};
+extern char* builtin_str[];
+extern int (*builtin_func[])(char**);
 
 #endif

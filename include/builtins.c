@@ -4,6 +4,18 @@
 #include <unistd.h>
 #include "builtins.h"
 
+char *builtin_str[] = {
+    "cd",
+    "help",
+    "exit"
+};
+
+int (*builtin_func[])(char**) = {
+    &chd,
+    &help,
+    &quit
+};
+
 int num_builtins(){
     return sizeof(builtin_str) / sizeof(char*); 
 }

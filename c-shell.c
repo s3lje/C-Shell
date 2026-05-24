@@ -16,8 +16,11 @@ char*   read_line();
 char**  parse_line(char*);
 char**  split_pipes(char*, int*);
 int     launch_bin(char**);
-int     exec(char**);
+int     launch_piped(char**, int);
+int     exec_cmd(char**);
 char*   shorten_path(const char*);
+void    free_args(char**);
+void    free_cmds(char**, int); 
 
 int main(){
 
@@ -37,7 +40,7 @@ void shell_loop(){
     const char* username = getenv("USER");
 
     if (username == NULL){
-        fprintf(stderr, "Username not found... Defaulting to user.\n");
+        fprintf(stderr, "Warning: Username not found... Defaulting to user.\n");
         username = "user"; 
     }
 
@@ -52,143 +55,46 @@ void shell_loop(){
         }
 
         line   = read_line();
-        args   = NULL; 
         cmds   = split_pipes(line, &cmd_num);
 
         if (cmd_num == 1){
             args = parse_line(cmds[0]);
             if (!args[0]) { free(args); free(cmds); continue; }
-            status = exec(args);
-        } else if (cmd_num == 2){
-            status = 1; 
-            int fd[2];
-            if (pipe(fd) == -1){
-                perror("pipe");
-                exit(EXIT_FAILURE);
-            }
-            
-            pid_t pid1 = fork();
-            if (pid1 == -1){
-                perror("fork");
-                exit(EXIT_FAILURE); 
-            }
-            if (pid1 == 0){
-                close(fd[0]);
-                dup2(fd[1], STDOUT_FILENO);
-                close(fd[1]);
-
-                args = parse_line(cmds[0]);
-                execvp(args[0], args);
-                perror("execpv (cmd1)");
-                exit(EXIT_FAILURE);
-            }
-
-            pid_t pid2 = fork();
-            if (pid2 == -1){
-                perror("fork");
-                exit(EXIT_FAILURE);
-            }
-
-            if (pid2 == 0){
-                close(fd[1]);
-                dup2(fd[0], STDIN_FILENO);
-                close(fd[0]);
-
-                args = parse_line(cmds[1]);
-                execvp(args[0], args); 
-                perror("execpv (cmd2)");
-                exit(EXIT_FAILURE); 
-            }
-
-            close(fd[0]);
-            close(fd[1]);
-            waitpid(pid1, NULL, 0);
-            waitpid(pid2, NULL, 0); 
-        } else { // more than two commands
-            int pipe_num = cmd_num - 1;
-            int pipes[pipe_num][2];
-
-            for (int i = 0; i < pipe_num; i++){
-                if (pipe(pipes[i]) == -1){
-                    perror("pipe");
-                    exit(EXIT_FAILURE);
-                }
-            }
-
-            for (int i = 0; i < cmd_num; i++){
-                pid_t pid = fork();
-                if (pid == -1){
-                    perror("fork");
-                    exit(EXIT_FAILURE);
-                }
-
-                if (pid == 0){
-                    if (i > 0)
-                        dup2(pipes[i-1][0], STDIN_FILENO);
-                    if (i < cmd_num - 1)
-                        dup2(pipes[i][1], STDOUT_FILENO);
-
-                    for (int j = 0; j < pipe_num; j++){
-                        close(pipes[j][0]);
-                        close(pipes[j][1]);
-                    }
-
-                    args = parse_line(cmds[i]);
-                    execvp(args[0], args);
-                    perror("execvp");
-                    exit(EXIT_FAILURE);
-                }
-            }
-
-            for (int i = 0; i < pipe_num; i++){
-                close(pipes[i][0]);
-                close(pipes[i][1]);
-            }
-            for (int i = 0; i < cmd_num; i++){
-                waitpid(-1, NULL, 0); // wait for any child to finish
-            }
-
+            status = exec_cmd(args);
+        } else {
+            status = launch_piped(cmds, cmd_num); 
         }
 
         free(line);
-        if (args) {
-            free(args);
-            args = NULL; 
-        }
-        free(cmds); 
+        free_cmds(cmds, cmd_num);  
     } while (status);
 }
 
-char* read_line(){
-    int   bufferSize = LINE_BUFSIZE;
-    int   pos        = 0;
-    char* buffer     = malloc(sizeof(char) * bufferSize);
-    int c;
 
-    if (!buffer){
-        fprintf(stderr, "read_line: allocation error...\n");
+char *read_line(void) {
+    int   cap = LINE_BUFSIZE;
+    int   pos = 0;
+    int   c;
+    char *buf = malloc(cap);
+    if (!buf) {
+        perror("malloc");
         exit(EXIT_FAILURE);
     }
 
-    while (1){
-        c = getchar();
-        if (c == EOF || c == '\n'){ // replace end of line with terminator
-            buffer[pos] = '\0';
-            return buffer;
-        } else {
-            buffer[pos] = c;
-        }
-        pos++;
-
-        if (pos >= bufferSize){
-            bufferSize += LINE_BUFSIZE;
-            buffer = realloc(buffer, bufferSize);
-            if (!buffer) {
-                fprintf(stderr, "read_line: re-allocation error...\n"); 
+    while ((c = getchar()) != EOF && c != '\n') {
+        buf[pos++] = (char)c;
+        if (pos >= cap) {
+            cap *= 2;
+            buf = realloc(buf, cap);
+            if (!buf) {
+                perror("realloc");
                 exit(EXIT_FAILURE);
             }
         }
     }
+
+    buf[pos] = '\0';
+    return buf;
 }
 
 char** parse_line(char* line){
@@ -306,47 +212,104 @@ int launch_bin(char** args){
 
     return 1;
 }
+int launch_piped(char **cmds, int cmd_num) {
+    int pipe_num = cmd_num - 1;
+    int pipes[pipe_num][2];
 
-int exec(char** args){
-    if (args[0] == NULL){
-        // Empty command entered
+    for (int i = 0; i < pipe_num; i++) {
+        if (pipe(pipes[i]) == -1) {
+            perror("pipe");
+            return 1;
+        }
+    }
+
+    for (int i = 0; i < cmd_num; i++) {
+        pid_t pid = fork();
+        if (pid == -1) {
+            perror("fork");
+            return 1;
+        }
+
+        if (pid == 0) {
+            if (i > 0)
+                dup2(pipes[i - 1][0], STDIN_FILENO);
+            if (i < cmd_num - 1)
+                dup2(pipes[i][1], STDOUT_FILENO);
+
+            for (int j = 0; j < pipe_num; j++) {
+                close(pipes[j][0]);
+                close(pipes[j][1]);
+            }
+
+            char **args = parse_line(cmds[i]);
+            execvp(args[0], args);
+            perror("execvp");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    for (int i = 0; i < pipe_num; i++) {
+        close(pipes[i][0]);
+        close(pipes[i][1]);
+    }
+    for (int i = 0; i < cmd_num; i++)
+        wait(NULL);
+
+    return 1;
+}
+int exec_cmd(char **args) {
+    if (!args[0])
+        return 1;
+
+    for (int i = 0; i < num_builtins(); i++) {
+        if (strcmp(args[0], builtin_str[i]) == 0)
+            return (*builtin_func[i])(args);
+    }
+
+    /* External command */
+    pid_t pid = fork();
+    if (pid == -1) {
+        perror("fork");
         return 1;
     }
 
-    for (int i = 0; i < num_builtins(); i++){
-        if (strcmp(args[0], builtin_str[i]) == 0){
-            return (*builtin_func[i])(args);
+    if (pid == 0) {
+        if (execvp(args[0], args) == -1) {
+            fprintf(stderr, "c-shell: %s: command not found\n", args[0]);
+            exit(EXIT_FAILURE);
         }
     }
 
-    return launch_bin(args); 
+    int status;
+    waitpid(pid, &status, WUNTRACED);
+    return 1;
 }
 
-char* shorten_path(const char* full_path){
-    char* home = getenv("HOME");
+////// HELPERS ///////////////////////////
+void free_args(char **args) {
+    if (!args) return;
+    for (int i = 0; args[i]; i++)
+        free(args[i]);
+    free(args);
+}
 
-    if (!home){
-        return strdup(full_path);
-    }
+void free_cmds(char **cmds, int n) {
+    if (!cmds) return;
+    for (int i = 0; i < n; i++)
+        free(cmds[i]);
+    free(cmds);
+}
 
-    size_t home_len = strlen(home);
-    size_t path_len = strlen(full_path);
+char *shorten_path(const char *path) {
+    const char *home     = getenv("HOME");
+    size_t      home_len = home ? strlen(home) : 0;
 
-    if (path_len >= home_len && strncmp(full_path, home, home_len) == 0){
-        if (path_len == home_len){
-            return strdup("~");
+    if (home && strncmp(path, home, home_len) == 0) {
+        if (path[home_len] == '/' || path[home_len] == '\0') {
+            char *short_path;
+            if (asprintf(&short_path, "~%s", path + home_len) != -1)
+                return short_path;
         }
-
-        if (full_path[home_len] == '/'){
-            size_t remaining_len = path_len - home_len;
-            char* short_path = malloc(remaining_len + 2);
-
-            if (!short_path) return strdup(full_path);
-
-            sprintf(short_path, "~%s", full_path + home_len); 
-            return short_path; 
-        }
     }
-
-    return strdup(full_path); 
+    return strdup(path);
 }
